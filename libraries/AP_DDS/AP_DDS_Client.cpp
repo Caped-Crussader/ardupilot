@@ -37,6 +37,9 @@
 #if AP_DDS_RC_PUB_ENABLED
 #include "AP_RSSI/AP_RSSI.h"
 #endif // AP_DDS_RC_PUB_ENABLED
+#if AP_DDS_SERVO_OUT_PUB_ENABLED || AP_DDS_SERVO_IN_SUB_ENABLED
+#include <SRV_Channel/SRV_Channel.h>
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED || AP_DDS_SERVO_IN_SUB_ENABLED
 
 #if AP_EXTERNAL_CONTROL_ENABLED
 #include "AP_DDS_ExternalControl.h"
@@ -565,6 +568,29 @@ bool AP_DDS_Client::update_topic(ardupilot_msgs_msg_Rc& msg)
 }
 #endif // AP_DDS_RC_PUB_ENABLED
 
+#if AP_DDS_SERVO_OUT_PUB_ENABLED
+void AP_DDS_Client::update_topic(ardupilot_msgs_msg_Servo& msg)
+{
+    uint64_t time_ms = AP_HAL::millis64();
+    msg.header.stamp.sec = time_ms / 1000UL;
+    msg.header.stamp.nanosec = (time_ms % 1000UL) * 1000000UL;
+    strcpy(msg.header.frame_id, "base_link");
+
+    // Read servo outputs with bounds checking
+    const uint8_t num_channels = MIN(SRV_Channels::NUM_CHANNELS, 32);
+    msg.channels_size = num_channels;
+
+    for (uint8_t i = 0; i < num_channels; i++) {
+        SRV_Channel* ch = SRV_Channels::srv_channel(i);
+        if (ch != nullptr) {
+            msg.channels[i] = ch->get_output_pwm();
+        } else {
+            msg.channels[i] = 0;
+        }
+    }
+}
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED
+
 #if AP_DDS_GEOPOSE_PUB_ENABLED
 void AP_DDS_Client::update_topic(geographic_msgs_msg_GeoPoseStamped& msg)
 {
@@ -880,6 +906,36 @@ void AP_DDS_Client::on_topic(uxrSession* uxr_session, uxrObjectId object_id, uin
         break;
     }
 #endif // AP_DDS_GLOBAL_POS_CTRL_ENABLED
+#if AP_DDS_SERVO_IN_SUB_ENABLED
+        case topics[to_underlying(TopicIndex::SERVO_IN_SUB)].dr_id.id: {
+            ardupilot_msgs_msg_Servo servo_msg;
+            const bool success = ardupilot_msgs_msg_Servo_deserialize_topic(ub, &servo_msg);
+            if (!success) {
+                break;
+            }
+
+            // Validate and apply servo commands with safety checks
+            const uint8_t num_channels = MIN(servo_msg.channels_size, 32);
+            for (uint8_t i = 0; i < num_channels; i++) {
+                // Skip protected channels (typically flight control channels 0-7)
+                if (i < AP_DDS_SERVO_PROTECTED_CHANNELS) {
+                    continue;
+                }
+
+                const uint16_t pwm_value = servo_msg.channels[i];
+
+                // Validate PWM range (typical servo range: 800-2200 microseconds)
+                if (pwm_value >= 800 && pwm_value <= 2200) {
+                    SRV_Channel* ch = SRV_Channels::srv_channel(i);
+                    if (ch != nullptr) {
+                        ch->set_output_pwm(pwm_value);
+                    }
+                }
+                // Silently ignore out-of-range values for safety
+            }
+            break;
+        }
+#endif // AP_DDS_SERVO_IN_SUB_ENABLED
     }
 
 }
@@ -1640,6 +1696,25 @@ void AP_DDS_Client::write_tx_local_rc_topic()
     }
 }
 #endif // AP_DDS_RC_PUB_ENABLED
+#if AP_DDS_SERVO_OUT_PUB_ENABLED
+bool AP_DDS_Client::write_tx_servo_out_topic()
+{
+    WITH_SEMAPHORE(csem);
+    if (connected) {
+        ucdrBuffer ub {};
+        update_topic(tx_servo_out_topic);
+        const uint32_t topic_size = ardupilot_msgs_msg_Servo_size_of_topic(&tx_servo_out_topic, 0);
+        uxr_prepare_output_stream(&session, reliable_out, topics[to_underlying(TopicIndex::SERVO_OUT_PUB)].dw_id, &ub, topic_size);
+        const bool success = ardupilot_msgs_msg_Servo_serialize_topic(&ub, &tx_servo_out_topic);
+        if (!success) {
+            // TODO sometimes serialization fails on bootup. Determine why.
+            // AP_HAL::panic("FATAL: DDS_Client failed to serialize");
+        }
+        return success;
+    }
+    return false;
+}
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED
 #if AP_DDS_IMU_PUB_ENABLED
 void AP_DDS_Client::write_imu_topic()
 {
@@ -1800,6 +1875,12 @@ void AP_DDS_Client::update()
         }
     }
 #endif // AP_DDS_RC_PUB_ENABLED
+#if AP_DDS_SERVO_OUT_PUB_ENABLED
+    if (cur_time_ms - last_servo_out_time_ms >= AP_DDS_DELAY_SERVO_OUT_TOPIC_MS) {
+        write_tx_servo_out_topic();
+        last_servo_out_time_ms = cur_time_ms;
+    }
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED
 #if AP_DDS_IMU_PUB_ENABLED
     if (cur_time_ms - last_imu_time_ms > DELAY_IMU_TOPIC_MS) {
         update_topic(imu_topic);

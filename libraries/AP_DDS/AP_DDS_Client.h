@@ -61,6 +61,12 @@
 #include "rcl_interfaces/msg/ParameterType.h"
 #include "rcl_interfaces/srv/GetParameters.h"
 #endif //AP_DDS_PARAMETER_SERVER_ENABLED
+#if AP_DDS_SERVO_OUT_PUB_ENABLED
+#include "ardupilot_msgs/msg/Servo.h"
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED
+#if AP_DDS_SERVO_IN_SUB_ENABLED
+#include "ardupilot_msgs/msg/Servo.h"
+#endif // AP_DDS_SERVO_IN_SUB_ENABLED
 
 #include <AP_HAL/AP_HAL.h>
 #include <AP_HAL/Scheduler.h>
@@ -245,6 +251,15 @@ private:
     // incoming transforms
     static tf2_msgs_msg_TFMessage rx_dynamic_transforms_topic;
 #endif // AP_DDS_DYNAMIC_TF_SUB_ENABLED
+#if AP_DDS_SERVO_OUT_PUB_ENABLED
+    ardupilot_msgs_msg_Servo tx_servo_out_topic;
+    uint64_t last_servo_out_time_ms;
+    void update_topic(ardupilot_msgs_msg_Servo& msg);
+    bool write_tx_servo_out_topic();
+#endif // AP_DDS_SERVO_OUT_PUB_ENABLED
+#if AP_DDS_SERVO_IN_SUB_ENABLED
+    ardupilot_msgs_msg_Servo rx_servo_topic;
+#endif // AP_DDS_SERVO_IN_SUB_ENABLED
     HAL_Semaphore csem;
 
 #if AP_DDS_PARAMETER_SERVER_ENABLED

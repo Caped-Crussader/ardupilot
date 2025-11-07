@@ -1,0 +1,20 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from ardupilot_msgs/msg/Servo.msg
+// generated code does not contain a copyright notice
+
+#include "std_msgs/msg/Header.idl"
+
+module ardupilot_msgs {
+  module msg {
+    @verbatim (language="comment", text=
+      "Servo PWM output values" "\n"
+      "https://mavlink.io/en/messages/common.html#SERVO_OUTPUT_RAW")
+    struct Servo {
+      std_msgs::msg::Header header;
+
+      @verbatim (language="comment", text="PWM values in microseconds (typically 1000-2000)")
+      @unit (value="us")
+      sequence<uint16, 32> channels;
+    };
+  };
+};
