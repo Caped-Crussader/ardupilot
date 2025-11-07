@@ -907,34 +907,34 @@ void AP_DDS_Client::on_topic(uxrSession* uxr_session, uxrObjectId object_id, uin
     }
 #endif // AP_DDS_GLOBAL_POS_CTRL_ENABLED
 #if AP_DDS_SERVO_IN_SUB_ENABLED
-        case topics[to_underlying(TopicIndex::SERVO_IN_SUB)].dr_id.id: {
-            ardupilot_msgs_msg_Servo servo_msg;
-            const bool success = ardupilot_msgs_msg_Servo_deserialize_topic(ub, &servo_msg);
-            if (!success) {
-                break;
-            }
-
-            // Validate and apply servo commands with safety checks
-            const uint8_t num_channels = MIN(servo_msg.channels_size, 32);
-            for (uint8_t i = 0; i < num_channels; i++) {
-                // Skip protected channels (typically flight control channels 0-7)
-                if (i < AP_DDS_SERVO_PROTECTED_CHANNELS) {
-                    continue;
-                }
-
-                const uint16_t pwm_value = servo_msg.channels[i];
-
-                // Validate PWM range (typical servo range: 800-2200 microseconds)
-                if (pwm_value >= 800 && pwm_value <= 2200) {
-                    SRV_Channel* ch = SRV_Channels::srv_channel(i);
-                    if (ch != nullptr) {
-                        ch->set_output_pwm(pwm_value);
-                    }
-                }
-                // Silently ignore out-of-range values for safety
-            }
+    case topics[to_underlying(TopicIndex::SERVO_IN_SUB)].dr_id.id: {
+        ardupilot_msgs_msg_Servo servo_msg;
+        const bool success = ardupilot_msgs_msg_Servo_deserialize_topic(ub, &servo_msg);
+        if (!success) {
             break;
         }
+
+        // Validate and apply servo commands with safety checks
+        const uint8_t num_channels = MIN(servo_msg.channels_size, 32);
+        for (uint8_t i = 0; i < num_channels; i++) {
+            // Skip protected channels (typically flight control channels 0-7)
+            if (i < AP_DDS_SERVO_PROTECTED_CHANNELS) {
+                continue;
+            }
+
+            const uint16_t pwm_value = servo_msg.channels[i];
+
+            // Validate PWM range (typical servo range: 800-2200 microseconds)
+            if (pwm_value >= 800 && pwm_value <= 2200) {
+                SRV_Channel* ch = SRV_Channels::srv_channel(i);
+                if (ch != nullptr) {
+                    ch->set_output_pwm(pwm_value);
+                }
+            }
+            // Silently ignore out-of-range values for safety
+        }
+        break;
+    }
 #endif // AP_DDS_SERVO_IN_SUB_ENABLED
     }
 
